@@ -69,6 +69,12 @@ fOyJI22NfTI+3SMAsMQ8L+WVQI+58bu7+iEqoEfHCXikE8BtTbJAN4Oob1lrjfOe
 -----END PGP PUBLIC KEY BLOCK-----
 "
 
+APT_SOURCE_APPS="/etc/apt/sources.list.d/pop-os-apps.sources"
+APT_SOURCE_RELEASE="/etc/apt/sources.list.d/pop-os-release.sources"
+APT_SOURCE_SYSTEM="/etc/apt/sources.list.d/system.sources"
+APT_KEYRING_POP="/etc/apt/trusted.gpg.d/pop-keyring-2017-archive.gpg"
+APT_KEYRING_UBUNTU="/etc/apt/trusted.gpg.d/ubuntu-keyring-2018-archive.gpg"
+
 RELEASE="$(lsb_release -cs)"
 PROPRIETARY_REPO="http://apt.pop-os.org/proprietary"
 PROPRIETARY_SOURCE="X-Repolib-Name: Pop_OS Applications
@@ -76,7 +82,9 @@ Enabled: yes
 Types: deb
 URIs: ${PROPRIETARY_REPO}
 Suites: ${RELEASE}
-Components: main"
+Components: main
+Signed-By: ${APT_KEYRING_POP}
+"
 
 SYS_REPO="http://apt.pop-os.org/ubuntu"
 SYS_SOURCE="X-Repolib-Name: Pop_OS System Sources
@@ -85,6 +93,7 @@ Types: deb deb-src
 URIs: ${SYS_REPO}
 Suites: ${RELEASE} ${RELEASE}-security ${RELEASE}-updates ${RELEASE}-backports
 Components: main restricted universe multiverse
+Signed-By: ${APT_KEYRING_UBUNTU}
 X-Repolib-Default-Mirror: ${SYS_REPO}"
 
 case "$1" in
@@ -122,7 +131,7 @@ case "$1" in
         if ! grep "${PROPRIETARY_REPO}" /etc/apt/sources.list{,.d/*.list,.d/*.sources}
         then
             echo "${ISO_KEY}" | apt-key add -
-            echo "${PROPRIETARY_SOURCE}" > /etc/apt/sources.list.d/pop-os-apps.sources
+            echo "${PROPRIETARY_SOURCE}" > "${APT_SOURCE_APPS}"
         fi
 
         # Convert system sources from one-line format to DEB822, if present
@@ -134,10 +143,11 @@ case "$1" in
             sed -i '/.*security.ubuntu.com\/ubuntu.*$/d' /etc/apt/sources.list # Needed if this was added by software-properties
             sed -i '/.*apt.pop-os.org\/ubuntu.*$/d' /etc/apt/sources.list # Convert apt.pop-os.org as well.
         fi
+
         # Look for existing system sources, and create if not found
-        if [ ! -f /etc/apt/sources.list.d/system.sources ]
+        if [ ! -f "${APT_SOURCE_SYSTEM}" ]
         then
-            echo "${SYS_SOURCE}" > /etc/apt/sources.list.d/system.sources
+            echo "${SYS_SOURCE}" > "${APT_SOURCE_SYSTEM}"
         fi
 
         # Convert to apt.pop-os.org/release if using PPA
@@ -148,6 +158,11 @@ case "$1" in
             # Convert to apt.pop-os.org/release if using PPA
             sed -i 's|ppa.launchpad.net/system76/pop/ubuntu|apt.pop-os.org/release|' "${file}"
         done
+
+        # Add Signed-By fields if they are missing
+        grep Signed-By "${APT_SOURCE_APPS}" || sed -i "/Components/a Signed-By: ${APT_KEYRING_POP}" "${APT_SOURCE_APPS}"
+        grep Signed-By "${APT_SOURCE_RELEASE}" || sed -i "/Components/a Signed-By: ${APT_KEYRING_POP}" "${APT_SOURCE_RELEASE}"
+        grep Signed-By "${APT_SOURCE_SYSTEM}" || sed -i "/Components/a Signed-By: ${APT_KEYRING_UBUNTU}" "${APT_SOURCE_SYSTEM}"
 
         # Set the Vendor-recommended default mirror:
         apt-manage modify system --default-mirror "${SYS_REPO}"
